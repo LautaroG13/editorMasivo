@@ -9,8 +9,6 @@ app = Flask(__name__)
 # =========================================================================
 # ⚙️ CONFIGURACIÓN DINÁMICA DE TIENDANUBE (Variables libres y globales)
 # =========================================================================
-# Al dejarlas globales a nivel de servidor, evitamos que al recargar la página
-# o hacer F5 desde el iframe los valores se vuelvan "None".
 STORE_ID = None
 ACCESS_TOKEN = None
 USER_AGENT = 'web@cotillonchialvo.com'
@@ -31,14 +29,14 @@ def obtener_headers():
 
 
 # =========================================================================
-# 🧭 RUTAS DE CONEXIÓN Y FLUJO OAUTH (PASO PREVIO)
+# 🧭 RUTAS DE CONEXIÓN Y FLUJO OAUTH DIRECTO
 # =========================================================================
 
 @app.route('/')
 def index():
     """
-    Ruta raíz: Evalúa si la tienda ya otorgó los permisos.
-    Si no hay token, exige el paso previo de conexión. Si hay, abre la grilla.
+    Ruta raíz: Si ya tenemos guardadas las credenciales en el servidor,
+    muestra la grilla del dashboard. Si no, muestra la pantalla de conectar.
     """
     global STORE_ID, ACCESS_TOKEN
     print(f"🔍 Evaluando credenciales en Raíz -> ID: {STORE_ID}, Token: {ACCESS_TOKEN}")
@@ -52,14 +50,14 @@ def index():
 @app.route('/auth/callback')
 def auth_callback():
     """
-    Callback Oficial: Recibe el código temporal de Tiendanube, solicita el
-    Access Token definitivo utilizando data=payload y lo guarda en el backend.
+    Callback Oficial: Captura el código temporal de un solo uso, lo canjea de inmediato,
+    guarda las credenciales en las variables globales y redirecciona directo a la raíz (Grilla).
     """
     global STORE_ID, ACCESS_TOKEN
     code = request.args.get('code')
     
     if not code:
-        print("❌ Error: Código de autorización ausente en los parámetros de la URL.")
+        print("❌ Error: Código de autorización ausente en la URL.")
         return "Error: No se recibió el código de autorización", 400
 
     token_url = "https://www.tiendanube.com/apps/authorize/token"
@@ -71,24 +69,27 @@ def auth_callback():
     }
     
     try:
-        print("📡 Enviando solicitud de Token a Tiendanube mediante Data Form...")
-        # CORRECCIÓN CLAVE: Se usa data=payload en lugar de json=payload
+        print(f"📡 Canjeando código único de Tiendanube: {code}")
+        # Enviamos la petición como formulario (data=) que es el formato que exige Tiendanube
         res_oauth = requests.post(token_url, data=payload)
-        
-        print(f"📡 Respuesta cruda del servidor Tiendanube: {res_oauth.status_code} - {res_oauth.text}")
         response = res_oauth.json()
         
-        # Guardado inmediato en variables globales del backend
+        # Evaluamos si Tiendanube devolvió un error estructural en el JSON antes de asignar
+        if 'error' in response or not response.get('access_token'):
+            print(f"❌ Tiendanube rechazó el canje: {response}")
+            return f"Error en la vinculación: Tiendanube devolvió un error -> {response.get('error_description', response)}", 400
+        
+        # Guardado exitoso e inmediato en el backend
         ACCESS_TOKEN = response.get('access_token')
         STORE_ID = response.get('user_id') 
         
-        if not ACCESS_TOKEN:
-            return f"Error en la vinculación: Tiendanube devolvió un error -> {response.get('error_description', response)}", 400
+        print("==================================================")
+        print("====== ✅ APP CONECTADA CON ÉXITO EN EL BACKEND =====")
+        print(f"   STORE_ID Activado: {STORE_ID}")
+        print("==================================================")
         
-        print(f"✅ Credenciales fijadas en memoria -> Tienda ID: {STORE_ID}")
-        
-        # Renderiza la plantilla intermedia pasándole los datos reales capturados
-        return render_template('conectar.html', tienda_id=STORE_ID, token=ACCESS_TOKEN, mostrar_boton=True)
+        # REDIRECCIÓN AUTOMÁTICA: Al ir a '/', como ACCESS_TOKEN ya existe, cargará el dashboard de una sola vez
+        return redirect('/')
 
     except Exception as e:
         print(f"❌ Error crítico durante el proceso de Callback OAuth: {str(e)}")
@@ -97,21 +98,11 @@ def auth_callback():
 
 @app.route('/api/confirmar_conexion', methods=['POST'])
 def confirmar_conexion():
-    """
-    Valida y confirma que los tokens sigan vigentes en el backend antes
-    de liberar el acceso completo al Dashboard.
-    """
+    """Ruta de compatibilidad para el botón manual si es requerido"""
     global STORE_ID, ACCESS_TOKEN
-    
     if STORE_ID and ACCESS_TOKEN:
-        print("==================================================")
-        print("====== ✅ EDITOR MASIVO INTEGRADO Y ACTIVADO ======")
-        print(f"   Tienda en producción: {STORE_ID}")
-        print("==================================================")
         return jsonify({"status": "success"})
-    else:
-        print("⚠️ Alerta: Se intentó confirmar la conexión pero las variables estaban vacías.")
-        return jsonify({"status": "error", "message": "Faltan credenciales en el servidor."}), 400
+    return jsonify({"status": "error", "message": "Faltan credenciales."}), 400
 
 
 # =========================================================================
@@ -120,10 +111,6 @@ def confirmar_conexion():
 
 @app.route('/api/productos', methods=['GET'])
 def obtener_productos():
-    """
-    Carga Infinita: Trae bloques de a 50 productos desde Tiendanube,
-    desglosa sus variantes y mapea las propiedades reales de la tienda.
-    """
     global STORE_ID
     page = request.args.get('page', default=1, type=int)
     per_page = 50
@@ -147,7 +134,7 @@ def obtener_productos():
         for prod in datos:
             nombre_prod = prod.get('name', {}).get('es', 'Sin nombre')
             
-            # --- CAPTURA DE NOMBRES DE PROPIEDADES REALES ---
+            # Captura de nombres de propiedades reales de la tienda
             atributos_prod = prod.get('attributes', [])
             nombres_propiedades = []
             for attr in atributos_prod:
@@ -156,7 +143,6 @@ def obtener_productos():
                 elif isinstance(attr, str):
                     nombres_propiedades.append(attr)
             
-            # Procesamiento de categorías vinculadas
             categories_list = []
             if prod.get('categories'):
                 for c in prod.get('categories', []):
@@ -175,15 +161,11 @@ def obtener_productos():
             url_imagen = images[0].get('src', '') if images else ''
             free_shipping = "Si" if prod.get('free_shipping') else "No"
 
-            # Iteramos las variantes del producto para armar las filas individuales de la grilla
             for v in prod.get('variants', []):
                 values_prop = [val['es'] for val in v.get('values', []) if val.get('es')]
                 
                 productos_grilla.append({
-                    # 1. ATRIBUTO PRINCIPAL EXIGIDO: La URL de la imagen en primer lugar
                     "url_imagen": str(url_imagen),
-                    
-                    # Identificadores de control interno
                     "id_prod": str(prod.get('id', '')),
                     "id_var": str(v.get('id', '')),
                     "url_id": str(url_id),
@@ -192,33 +174,24 @@ def obtener_productos():
                     "sku": str(v.get('sku', '')) if v.get('sku') is not None else '',
                     "barcode": str(v.get('barcode', '')) if v.get('barcode') is not None else '',
                     "marca": str(brand),
-                    
-                    # Valores comerciales numéricos
                     "precio": float(v.get('price', 0)) if v.get('price') else 0.0,
                     "precio_promo": float(v.get('promotional_price', 0)) if v.get('promotional_price') else 0.0,
                     "costo": float(v.get('cost', 0)) if v.get('cost') else 0.0,
                     "stock": int(v.get('stock', 0)) if v.get('stock') is not None else 0,
-                    
-                    # Datos logísticos de envío
                     "peso": float(v.get('weight', 0)) if v.get('weight') else 0.0,
                     "alto": float(v.get('height', 0)) if v.get('height') else 0.0,
                     "ancho": float(v.get('width', 0)) if v.get('width') else 0.0,
                     "profundidad": float(v.get('depth', 0)) if v.get('depth') else 0.0,
-                    
-                    # Visibilidad, SEO y etiquetas
                     "mostrar": str(mostrar_str),
                     "envio_gratis": str(free_shipping),
                     "tags": str(tags_str),
                     "seo_titulo": str(seo_title),
                     "seo_desc": str(seo_description),
                     
-                    # Mapeo de Atributos Dinámicos Reales (Evitando textos estáticos)
                     "prop_nombre_1": nombres_propiedades[0] if len(nombres_propiedades) >= 1 else "",
                     "prop_valor_1": values_prop[0] if len(values_prop) >= 1 else "",
-                    
                     "prop_nombre_2": nombres_propiedades[1] if len(nombres_propiedades) >= 2 else "",
                     "prop_valor_2": values_prop[1] if len(values_prop) >= 2 else "",
-                    
                     "prop_nombre_3": nombres_propiedades[2] if len(nombres_propiedades) >= 3 else "",
                     "prop_valor_3": values_prop[2] if len(values_prop) >= 3 else ""
                 })
@@ -237,31 +210,19 @@ def obtener_productos():
 
 @app.route('/api/guardar', methods=['POST'])
 def guardar_cambios():
-    """
-    Recibe el array de modificaciones enviadas por la grilla editable,
-    formatea los campos numéricos y ejecuta los PUT hacia la API de Tiendanube.
-    """
     global STORE_ID
     cambios = request.json
     print(f"\n🚀 Sincronizando {len(cambios)} modificaciones habilitadas con Tienda Nube...")
     
     def limpiar_flotante(valor, predeterminado=0.0):
-        if valor is None or str(valor).strip() == "": 
-            return predeterminado
-        try: 
-            return float(str(valor).replace(",", ".").strip())
-        except Exception as err:
-            print(f"   ⚠️ Fallo al convertir flotante '{valor}', aplicando default: {err}")
-            return predeterminado
+        if valor is None or str(valor).strip() == "": return predeterminado
+        try: return float(str(valor).replace(",", ".").strip())
+        except Exception as err: return predeterminado
 
     def limpiar_entero(valor, predeterminado=0):
-        if valor is None or str(valor).strip() == "": 
-            return predeterminado
-        try: 
-            return int(str(valor).strip())
-        except Exception as err:
-            print(f"   ⚠️ Fallo al convertir entero '{valor}', aplicando default: {err}")
-            return predeterminado
+        if valor is None or str(valor).strip() == "": return predeterminado
+        try: return int(str(valor).strip())
+        except Exception as err: return predeterminado
 
     contador_ok = 0
     headers_dinamicos = obtener_headers()
@@ -270,7 +231,6 @@ def guardar_cambios():
         pid = item.get('id_prod')
         vid = item.get('id_var')
         
-        # 1. Actualizar datos del Producto Base (Padre)
         payload_producto = {}
         if 'nombre' in item and item['nombre']:
             payload_producto['name'] = {'es': item['nombre'].strip()}
@@ -285,12 +245,8 @@ def guardar_cambios():
             url_prod = f"https://api.tiendanube.com/v1/{STORE_ID}/products/{pid}"
             try: 
                 res_prod = requests.put(url_prod, headers=headers_dinamicos, json=payload_producto)
-                if res_prod.status_code not in [200, 201]:
-                    print(f"   ⚠️ Error actualizando base {pid}. Código: {res_prod.status_code}")
-            except Exception as e:
-                print(f"   ❌ Error de conexión en Producto Padre {pid}: {e}")
+            except Exception as e: pass
 
-        # 2. Actualizar datos específicos de la Variante (Hijo)
         payload_variante = {
             "stock": limpiar_entero(item.get('stock'), predeterminado=0),
             "sku": None if str(item.get('sku', '')).strip() == '' else item.get('sku'),
@@ -312,19 +268,12 @@ def guardar_cambios():
         
         try:
             res = requests.put(url_variant, headers=headers_dinamicos, json=payload_variante)
-            
-            # Control de Rate Limiting
             if res.status_code == 429:
-                print("⏳ API Límite alcanzado (429). Esperando 6 segundos...")
                 time.sleep(6)
                 res = requests.put(url_variant, headers=headers_dinamicos, json=payload_variante)
-                
             if res.status_code in [200, 201]: 
                 contador_ok += 1
-            else:
-                print(f"   ⚠️ Fallo en Variante {vid}. HTTP {res.status_code}: {res.text[:120]}")
-        except Exception as e: 
-            print(f"   ❌ Error de red al intentar actualizar variante {vid}: {e}")
+        except Exception as e: pass
             
         time.sleep(0.04)
 
@@ -338,10 +287,6 @@ def guardar_cambios():
 
 @app.after_request
 def permitir_iframe(response):
-    """
-    Intercepta las respuestas salientes de Flask para remover las restricciones 
-    tradicionales de renderizado en frames, permitiendo que corra dentro del panel Tiendanube.
-    """
     response.headers.pop('X-Frame-Options', None)
     response.headers['Content-Security-Policy'] = "frame-ancestors 'self' https://*.tiendanube.com https://*.mitiendanube.com https://admin.tiendanube.com;"
     return response
