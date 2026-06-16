@@ -157,15 +157,31 @@ def obtener_productos():
             brand = prod.get('brand', '')
             
             tags_str = ", ".join(prod['tags']) if prod.get('tags') and isinstance(prod['tags'], list) else ''
+            
+            # --- CORRECCIÓN CRUCIAL DE IMÁGENES PARA LA GRILLA ---
             images = prod.get('images', [])
-            url_imagen = images[0].get('src', '') if images else ''
+            url_imagen_cruda = ""
+            if images and isinstance(images, list):
+                # Extraemos de forma segura el atributo src de la primera imagen
+                url_imagen_cruda = images[0].get('src', '') if isinstance(images[0], dict) else str(images[0])
+
+            # Creamos el contenedor HTML para que la grilla lo dibuje como imagen y no como texto plano
+            if url_imagen_cruda.strip() != "":
+                html_imagen = f'<img src="{url_imagen_cruda}" style="width:40px; height:40px; object-fit:cover; border-radius:4px; display:block; margin:auto;">'
+            else:
+                # Mini miniatura gris por defecto si el producto no tiene foto cargada en Tiendanube
+                html_imagen = '<div style="width:40px; height:40px; background:#f0f0f0; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:10px; color:#aaa; margin:auto;">🚫</div>'
+            # -----------------------------------------------------
+
             free_shipping = "Si" if prod.get('free_shipping') else "No"
 
             for v in prod.get('variants', []):
                 values_prop = [val['es'] for val in v.get('values', []) if val.get('es')]
                 
                 productos_grilla.append({
-                    "url_imagen": str(url_imagen),
+                    # 1. Ahora le pasamos el elemento HTML ya renderizado para que la pantalla lo dibuje
+                    "url_imagen": html_imagen,
+                    
                     "id_prod": str(prod.get('id', '')),
                     "id_var": str(v.get('id', '')),
                     "url_id": str(url_id),
@@ -202,7 +218,6 @@ def obtener_productos():
     except Exception as e:
         print(f"❌ Error crítico en ruta /api/productos al procesar página {page}: {str(e)}")
         return jsonify({"last_page": page, "data": []})
-
 
 # =========================================================================
 # 💾 LÓGICA DE SINCRONIZACIÓN Y GUARDADO MASIVO
