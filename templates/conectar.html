@@ -39,20 +39,20 @@
 
 <script>
 function conectarEditor() {
-    const tiendaId = document.getElementById('tiendaId').innerText;
-    const token = document.getElementById('tokenHex').innerText;
-
+    // Ya no le enviamos datos en el body, Python ya los conoce de antemano
     fetch('/api/confirmar_conexion', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tienda_id: tiendaId, token: token })
+        body: JSON.stringify({}) // Vacío, seguridad total
     })
     .then(res => res.json())
     .then(data => {
         if(data.status === 'success') {
-            // ¡MAGIA! En vez de ir a una URL externa rota, recargamos la app en el mismo lugar.
-            // Al estar ya el token guardado en el backend, Flask va a renderizar tu grilla original.
+            // Recargamos la misma página. 
+            // Como ACCESS_TOKEN ya pasó de temporal a definitivo, '/' cargará tu dashboard real.
             window.location.reload();
+        } else {
+            alert("Hubo un problema al activar: " + data.message);
         }
     });
 }
