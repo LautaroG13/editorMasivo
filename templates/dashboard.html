@@ -74,7 +74,7 @@
         let tablaInstancia = null;
         let registroModificaciones = new Map();
 
-        function cargarBloqueProductos() {
+       function cargarBloqueProductos() {
             if (cargandoDatos) return;
             cargandoDatos = true;
 
@@ -85,7 +85,8 @@
                     if (productos.length === 0) return;
 
                     const filasNuevas = productos.map(p => [
-                        p.url_imagen || '', 
+                        // 🎯 Si el producto no tiene imagen, ponemos una por defecto transparente o vacía para que no tire error el componente
+                        p.url_imagen && p.url_imagen !== "None" ? p.url_imagen : 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 
                         p.id_prod,
                         p.id_var,
                         p.url_id,
@@ -116,7 +117,8 @@
                         tablaInstancia = jspreadsheet(document.getElementById('mi-excel'), {
                             data: filasNuevas,
                             columns: [
-                                { title: 'Foto', type: 'image', width: 65, readOnly: true },
+                                // 🎯 CONFIGURACIÓN CORRECTA: Tipo 'image' para renderizar la foto en miniatura
+                                { title: 'Foto', type: 'image', width: 70, readOnly: true },
                                 { title: 'ID Producto', type: 'text', width: 110, readOnly: true },
                                 { title: 'ID Variante', type: 'text', width: 110, readOnly: true },
                                 { title: 'URL ID', type: 'text', width: 140, readOnly: true },
@@ -146,6 +148,7 @@
                                 { title: 'SEO Desc', type: 'text', width: 200, readOnly: true }
                             ],
                             updateCells: function(el, cell, x, y, value) {
+                                // Mantenemos el bloqueo de las columnas de IDs y SEO
                                 if ((x >= 1 && x <= 3) || (x >= 25 && x <= 27)) {
                                     cell.classList.add('col-bloqueada');
                                 }

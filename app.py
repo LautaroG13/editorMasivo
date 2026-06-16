@@ -245,3 +245,21 @@ def auth_callback():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
+
+    try:
+        response = requests.post(token_url, json=payload).json()
+        access_token = response.get('access_token')
+        user_id = response.get('user_id') 
+        
+        # Guardamos el token para usarlo después
+        tienda_actual["access_token"] = access_token
+        tienda_actual["user_id"] = user_id
+        
+        print(f"¡Éxito! Tienda conectada: ID {user_id}")
+        
+        # IMPORTANTE: Redirigir de vuelta al administrador de Tiendanube
+        # Esto le avisa a Tiendanube que la instalación fue un éxito rotundo
+        return redirect(f"https://admin.tiendanube.com/admin/apps/{user_id}/installed")
+
+    except Exception as e:
+        return f"Error: {str(e)}", 500
