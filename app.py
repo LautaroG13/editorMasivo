@@ -1,30 +1,45 @@
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, redirect
 import requests
 import time
 import math
+import os
 
 app = Flask(__name__)
 
 # =========================================================================
-# ⚙️ CONFIGURACIÓN Y CREDENCIALES OFICIALES DE TIENDA NUBE
+# ⚙️ CONFIGURACIÓN DINÁMICA DE TIENDANUBE (Variables libres por sesión)
 # =========================================================================
-STORE_ID = '6951198'
-ACCESS_TOKEN = '9aa7e54a1e006c78d6f3aad2c670f47587e1e816'
+STORE_ID = None
+ACCESS_TOKEN = None
 USER_AGENT = 'web@cotillonchialvo.com'
 
-HEADERS = {
-    'Authentication': f'bearer {ACCESS_TOKEN}',
-    'User-Agent': USER_AGENT,
-    'Content-Type': 'application/json'
-}
+# Credenciales fijas de tu aplicación en Tiendanube Partners
+CLIENT_ID = "34257"
+CLIENT_SECRET = "b042eab988f05ab5b94a29ac96565ca993d679571b3078a5"
+
+# Función auxiliar para armar los headers dinámicamente según el token activo
+def obtener_headers():
+    global ACCESS_TOKEN, USER_AGENT
+    return {
+        'Authentication': f'bearer {ACCESS_TOKEN}',
+        'User-Agent': USER_AGENT,
+        'Content-Type': 'application/json'
+    }
 # =========================================================================
 
+# RUTA PRINCIPAL QUE MUESTRA EL DASHBOARD
 @app.route('/')
 def index():
+    global ACCESS_TOKEN
+    # Si la app se abre suelta sin estar instalada en una tienda, pide el flujo previo
+    if not ACCESS_TOKEN:
+        return "Por favor, iniciá la instalación desde el panel de Tiendanube para conectar la API de tu tienda."
     return render_template('dashboard.html')
 
+# TU LOGICA ORIGINAL DE CARGA INFINITA (Adaptada a la tienda dinámica)
 @app.route('/api/productos', methods=['GET'])
 def obtener_productos():
+    global STORE_ID
     page = request.args.get('page', default=1, type=int)
     per_page = 50
     print(f"🔄 Carga Infinita: Descargando bloque {page}...")
@@ -33,7 +48,8 @@ def obtener_productos():
     productos_grilla = []
     
     try:
-        res = requests.get(url_fetch, headers=HEADERS)
+        headers_dinamicos = obtener_headers()
+        res = requests.get(url_fetch, headers=headers_dinamicos)
         if res.status_code != 200 or not res.json():
             return jsonify({"last_page": page, "data": []})
             
@@ -101,12 +117,13 @@ def obtener_productos():
         print(f"❌ Error en carga: {e}")
         return jsonify({"last_page": page, "data": []})
 
+# TU LOGICA ORIGINAL DE GUARDAR CAMBIOS MASIVOS (Adaptada a la tienda dinámica)
 @app.route('/api/guardar', methods=['POST'])
 def guardar_cambios():
+    global STORE_ID
     cambios = request.json
     print(f"\n🚀 Sincronizando {len(cambios)} modificaciones habilitadas con Tienda Nube...")
     
-    # Convierte textos con coma o vacíos en números decimales limpios para Python
     def limpiar_flotante(valor, predeterminado=0.0):
         if valor is None or str(valor).strip() == "":
             return predeterminado
@@ -115,7 +132,6 @@ def guardar_cambios():
         except:
             return predeterminado
 
-    # Convierte celdas vacías de stock en un 0 entero para evitar el error ValueError
     def limpiar_entero(valor, predeterminado=0):
         if valor is None or str(valor).strip() == "":
             return predeterminado
@@ -125,11 +141,12 @@ def guardar_cambios():
             return predeterminado
 
     contador_ok = 0
+    headers_dinamicos = obtener_headers()
+    
     for item in cambios:
         pid = item.get('id_prod')
         vid = item.get('id_var')
         
-        # 1. Actualizar campos globales del Producto Padre (si se modificaron)
         payload_producto = {}
         if 'nombre' in item and item['nombre']:
             payload_producto['name'] = {'es': item['nombre'].strip()}
@@ -143,11 +160,10 @@ def guardar_cambios():
         if payload_producto:
             url_prod = f"https://api.tiendanube.com/v1/{STORE_ID}/products/{pid}"
             try:
-                requests.put(url_prod, headers=HEADERS, json=payload_producto)
+                requests.put(url_prod, headers=headers_dinamicos, json=payload_producto)
             except Exception as e:
                 print(f"   ⚠️ Error actualizando base {pid}: {e}")
 
-        # 2. Actualizar Variante: Stock, Logística (Medidas) y Precios
         payload_variante = {
             "stock": limpiar_entero(item.get('stock'), predeterminado=0),
             "sku": None if str(item.get('sku', '')).strip() == '' else item.get('sku'),
@@ -158,7 +174,6 @@ def guardar_cambios():
             "depth": limpiar_flotante(item.get('profundidad'), predeterminado=5.0)
         }
         
-        # Validación individual para precios para que no falle si se borran
         if item.get('precio') and str(item['precio']).strip() != "":
             payload_variante["price"] = round(limpiar_flotante(item['precio']))
         if item.get('precio_promo') and str(item['precio_promo']).strip() != "":
@@ -169,11 +184,11 @@ def guardar_cambios():
         url_variant = f"https://api.tiendanube.com/v1/{STORE_ID}/products/{pid}/variants/{vid}"
         
         try:
-            res = requests.put(url_variant, headers=HEADERS, json=payload_variante)
+            res = requests.put(url_variant, headers=headers_dinamicos, json=payload_variante)
             if res.status_code == 429:
                 print("⏳ Límite alcanzado, esperando 6 segundos...")
                 time.sleep(6)
-                res = requests.put(url_variant, headers=HEADERS, json=payload_variante)
+                res = requests.put(url_variant, headers=headers_dinamicos, json=payload_variante)
                 
             if res.status_code in [200, 201]:
                 contador_ok += 1
@@ -187,35 +202,13 @@ def guardar_cambios():
 
     return jsonify({"status": "success", "actualizados": contador_ok})
 
-if __name__ == '__main__':
-    import os
-    # Render nos da el puerto en una variable de entorno. Si no existe, usa el 5000 por defecto.
-    port = int(os.environ.get('PORT', 5000))
-    # CRUCIAL: '0.0.0.0' le dice a Flask que escuche conexiones externas, no solo locales.
-    app.run(host='0.0.0.0', port=port)
-
-    import os
-import requests
-from flask import Flask, request, redirect, render_template
-
-app = Flask(__name__)
-
-# NOTA: En un entorno real y seguro, estas credenciales se guardan como Variables de Entorno en Render.
-# Por ahora para testear, podés copiarlas de la pestaña "Resumen" de Tiendanube.
-CLIENT_ID = "34257" 
-CLIENT_SECRET = "b042eab988f05ab5b94a29ac96565ca993d679571b3078a5" # <-- Copiá el código largo tapado con puntitos de tu pantalla de Tiendanube
-
-@app.route('/')
-def home():
-    # Aquí cargás tu dashboard actual (dashboard.html)
-    return render_template('dashboard.html')
-
-# ESTA ES LA NUEVA RUTA CLAVE PARA TIENDANUBE
+# EL NUEVO FLUJO INTERMEDIO QUE CONECTA CUALQUIER API NATIVA
 @app.route('/auth/callback')
 def auth_callback():
+    global STORE_ID, ACCESS_TOKEN
     code = request.args.get('code')
     if not code:
-        return "Error: No se recibió el código", 400
+        return "Error: No se recibió el código de autorización", 400
 
     token_url = "https://www.tiendanube.com/apps/authorize/token"
     payload = {
@@ -227,16 +220,20 @@ def auth_callback():
     
     try:
         response = requests.post(token_url, json=payload).json()
-        access_token = response.get('access_token')
-        user_id = response.get('user_id') 
+        ACCESS_TOKEN = response.get('access_token')
+        STORE_ID = response.get('user_id') 
         
-        tienda_actual["access_token"] = access_token
-        tienda_actual["user_id"] = user_id
+        print(f"====== NUEVA TIENDA VINCULADA NATIVAMENTE ======")
+        print(f"STORE_ID asignado: {STORE_ID}")
+        print(f"ACCESS_TOKEN capturado con éxito.")
+        print(f"================================================")
         
-        print(f"¡Éxito! Tienda conectada: ID {user_id}")
-        
-        # FIJATE ACÁ: Tiene que estar a la misma altura que el print de arriba (8 espacios)
-        return redirect(f"https://admin.tiendanube.com/admin/apps/{user_id}/installed")
+        # Redirección oficial que aprueba la app y activa el menú lateral
+        return redirect(f"https://admin.tiendanube.com/admin/apps/{STORE_ID}/installed")
 
     except Exception as e:
-        return f"Error: {str(e)}", 500
+        return f"Error en la vinculación OAuth: {str(e)}", 500
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
