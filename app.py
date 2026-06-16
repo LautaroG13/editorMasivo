@@ -193,3 +193,55 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     # CRUCIAL: '0.0.0.0' le dice a Flask que escuche conexiones externas, no solo locales.
     app.run(host='0.0.0.0', port=port)
+
+    import os
+import requests
+from flask import Flask, request, redirect, render_template
+
+app = Flask(__name__)
+
+# NOTA: En un entorno real y seguro, estas credenciales se guardan como Variables de Entorno en Render.
+# Por ahora para testear, podés copiarlas de la pestaña "Resumen" de Tiendanube.
+CLIENT_ID = "34257" 
+CLIENT_SECRET = "b042eab988f05ab5b94a29ac96565ca993d679571b3078a5" # <-- Copiá el código largo tapado con puntitos de tu pantalla de Tiendanube
+
+@app.route('/')
+def home():
+    # Aquí cargás tu dashboard actual (dashboard.html)
+    return render_template('dashboard.html')
+
+# ESTA ES LA NUEVA RUTA CLAVE PARA TIENDANUBE
+@app.route('/auth/callback')
+def auth_callback():
+    # 1. Tiendanube te envía un código temporal por la URL
+    code = request.args.get('code')
+    
+    if not code:
+        return "Error: No se recibió el código de autorización de Tiendanube.", 400
+
+    # 2. Intercambiamos ese código por el Access Token definitivo de la tienda
+    token_url = "https://www.tiendanube.com/apps/authorize/token"
+    payload = {
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
+        "grant_type": "authorization_code",
+        "code": code
+    }
+    
+    try:
+        response = requests.post(token_url, json=payload).json()
+        access_token = response.get('access_token')
+        user_id = response.get('user_id') # Este es el ID único de la tienda que te instaló
+        
+        # Con este access_token ya tenés permiso de editar sus productos.
+        print(f"¡Éxito! Tienda conectada: ID {user_id} - Token: {access_token}")
+        
+        # 3. Redirigimos al usuario a la página principal de tu editor
+        return redirect('/')
+        
+    except Exception as e:
+        return f"Error en la autenticación: {str(e)}", 500
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
