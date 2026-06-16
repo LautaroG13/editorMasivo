@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="es" style="height: 100%; margin: 0; padding: 0;">
+<head>
+    <meta charset="UTF-8">
+    <title>Editor Masivo Excel Real - Cotillón Chialvo</title>
+    
+    <script src="https://bossanova.uk/jspreadsheet/v4/jexcel.js"></script>
+    <link rel="stylesheet" href="https://bossanova.uk/jspreadsheet/v4/jexcel.css" type="text/css" />
+    <script src="https://jsuites.net/v4/jsuites.js"></script>
+    <link rel="stylesheet" href="https://jsuites.net/v4/jsuites.css" type="text/css" />
+
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 15px;
+            background-color: #f1f5f9;
+            height: calc(100% - 30px);
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+        }
+        #contenedor-wrapper {
+            flex-grow: 1;
+            overflow: auto;
+            background-color: white;
+            border-radius: 8px;
+            border: 1px solid #cbd5e1;
+            position: relative;
+        }
+        .jexcel {
+            font-size: 13px !important;
+        }
+        .jexcel > tbody > tr > td {
+            padding: 6px 8px !important;
+            height: 42px !important;
+        }
+        .col-bloqueada {
+            background-color: #f8fafc !important;
+            color: #94a3b8 !important;
+            cursor: not-allowed;
+        }
+        .jexcel img {
+            width: 36px !important;
+            height: 36px !important;
+            border-radius: 4px;
+            object-fit: cover;
+            display: block;
+            margin: auto;
+        }
+    </style>
+</head>
+<body>
+
+    <div style="background-color: white; padding: 15px 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.02); margin-bottom: 15px; flex-shrink: 0;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h1 style="margin: 0 0 5px 0; color: #0f172a; font-size: 20px;">🚀 Grilla Excel (Guardado en Segundo Plano)</h1>
+                <p style="margin: 0; color: #64748b; font-size: 13px;">Podés guardar tus cambios sin perder tu posición ni recargar la página. Las celdas guardadas volverán a su color original.</p>
+            </div>
+            <button id="btn-guardar" style="padding: 12px 26px; background-color: #059669; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); transition: background 0.2s;">
+                💾 Guardar Cambios en Tienda Nube
+            </button>
+        </div>
+    </div>
+
+    <div id="contenedor-wrapper">
+        <div id="mi-excel"></div>
+    </div>
+
+    <script>
+        let paginaActual = 1;
+        let cargandoDatos = false;
+        let tablaInstancia = null;
+        let registroModificaciones = new Map();
+
+        function cargarBloqueProductos() {
+            if (cargandoDatos) return;
+            cargandoDatos = true;
+
+            fetch(`/api/productos?page=${paginaActual}`)
+                .then(res => res.json())
+                .then(res => {
+                    const productos = res.data || [];
+                    if (productos.length === 0) return;
+
+                    const filasNuevas = productos.map(p => [
+                        p.url_imagen || '', 
+                        p.id_prod,
+                        p.id_var,
+                        p.url_id,
+                        p.nombre,
+                        p.categorias,
+                        p.sku,
+                        p.barcode,
+                        p.marca,
+                        p.prop_nombre_1, p.prop_valor_1,
+                        p.prop_nombre_2, p.prop_valor_2,
+                        p.prop_nombre_3, p.prop_valor_3,
+                        p.precio,
+                        p.precio_promo,
+                        p.costo,
+                        p.stock,
+                        p.peso.toString().replace(".", ","), 
+                        p.alto.toString().replace(".", ","),
+                        p.ancho.toString().replace(".", ","),
+                        p.profundidad.toString().replace(".", ","),
+                        p.mostrar,
+                        p.envio_gratis,
+                        p.tags,
+                        p.seo_titulo,
+                        p.seo_desc
+                    ]);
+
+                    if (paginaActual === 1) {
+                        tablaInstancia = jspreadsheet(document.getElementById('mi-excel'), {
+                            data: filasNuevas,
+                            columns: [
+                                { title: 'Foto', type: 'image', width: 65, readOnly: true },
+                                { title: 'ID Producto', type: 'text', width: 110, readOnly: true },
+                                { title: 'ID Variante', type: 'text', width: 110, readOnly: true },
+                                { title: 'URL ID', type: 'text', width: 140, readOnly: true },
+                                { title: 'Nombre', type: 'text', width: 240 },
+                                { title: 'Categorías', type: 'text', width: 180 },
+                                { title: 'SKU', type: 'text', width: 100 },
+                                { title: 'Cod Barras', type: 'text', width: 120 },
+                                { title: 'Marca', type: 'text', width: 110 },
+                                { title: 'Prop 1', type: 'text', width: 100 },
+                                { title: 'Valor 1', type: 'text', width: 100 },
+                                { title: 'Prop 2', type: 'text', width: 100 },
+                                { title: 'Valor 2', type: 'text', width: 100 },
+                                { title: 'Prop 3', type: 'text', width: 100 },
+                                { title: 'Valor 3', type: 'text', width: 100 },
+                                { title: 'Precio ($)', type: 'text', width: 100 },
+                                { title: 'Promo ($)', type: 'text', width: 100 },
+                                { title: 'Costo ($)', type: 'text', width: 100 },
+                                { title: 'Stock', type: 'text', width: 80 },
+                                { title: 'Peso (kg)', type: 'text', width: 90 },
+                                { title: 'Alto (cm)', type: 'text', width: 80 },
+                                { title: 'Ancho (cm)', type: 'text', width: 80 },
+                                { title: 'Prof (cm)', type: 'text', width: 80 },
+                                { title: 'Visible', type: 'dropdown', width: 90, source: ['Si', 'No'] },
+                                { title: 'Envío Gratis', type: 'dropdown', width: 100, source: ['Si', 'No'] },
+                                { title: 'Tags', type: 'text', width: 150, readOnly: true },
+                                { title: 'SEO Título', type: 'text', width: 180, readOnly: true },
+                                { title: 'SEO Desc', type: 'text', width: 200, readOnly: true }
+                            ],
+                            updateCells: function(el, cell, x, y, value) {
+                                if ((x >= 1 && x <= 3) || (x >= 25 && x <= 27)) {
+                                    cell.classList.add('col-bloqueada');
+                                }
+                            },
+                            onchange: function(instance, cell, x, y, value) {
+                                const filaData = instance.jexcel.getRowData(y);
+                                const idVar = filaData[2];
+                                const idProd = filaData[1];
+                                
+                                const clavesColumnas = [
+                                    'url_imagen', 'id_prod', 'id_var', 'url_id', 'nombre', 'categorias',
+                                    'sku', 'barcode', 'marca', 'prop_nombre_1', 'prop_valor_1',
+                                    'prop_nombre_2', 'prop_valor_2', 'prop_nombre_3', 'prop_valor_3',
+                                    'precio', 'precio_promo', 'costo', 'stock', 'peso', 'alto', 'ancho',
+                                    'profundidad', 'mostrar', 'envio_gratis', 'tags', 'seo_titulo', 'seo_desc'
+                                ];
+
+                                if (!registroModificaciones.has(idVar)) {
+                                    registroModificaciones.set(idVar, { 
+                                        id_prod: idProd, 
+                                        id_var: idVar,
+                                        nombre: filaData[4],
+                                        sku: filaData[6],
+                                        barcode: filaData[7],
+                                        marca: filaData[8],
+                                        precio: filaData[15],
+                                        precio_promo: filaData[16],
+                                        costo: filaData[17],
+                                        stock: filaData[18],
+                                        peso: filaData[19],
+                                        alto: filaData[20],
+                                        ancho: filaData[21],
+                                        profundidad: filaData[22],
+                                        mostrar: filaData[23],
+                                        envio_gratis: filaData[24],
+                                        celdasAfectadas: [] 
+                                    });
+                                }
+                                
+                                const infoModif = registroModificaciones.get(idVar);
+                                const nombreCampo = clavesColumnas[x];
+                                infoModif[nombreCampo] = value;
+                                infoModif.celdasAfectadas.push(cell);
+
+                                cell.style.backgroundColor = '#fef08a';
+                                cell.style.color = '#000000';
+                            }
+                        });
+                    } else {
+                        filasNuevas.forEach(fila => {
+                            tablaInstancia.insertRow(fila);
+                        });
+                    }
+
+                    paginaActual++;
+                    cargandoDatos = false;
+                })
+                .catch(err => {
+                    console.error("Error en carga infinita:", err);
+                    cargandoDatos = false;
+                });
+        }
+
+        document.getElementById('contenedor-wrapper').addEventListener('scroll', function(e) {
+            const wrapper = e.target;
+            if (wrapper.scrollHeight - wrapper.scrollTop <= wrapper.clientHeight + 100) {
+                cargarBloqueProductos();
+            }
+        });
+
+        cargarBloqueProductos();
+
+        // 💾 Lógica de Guardado Avanzado en Segundo Plano
+        document.getElementById('btn-guardar').addEventListener('click', function() {
+            const listaCambios = Array.from(registroModificaciones.values());
+            
+            if (listaCambios.length === 0) {
+                alert("No detectamos modificaciones pendientes de guardado.");
+                return;
+            }
+
+            // 🎯 CORRECCIÓN CLAVE: Cambiado de True (Python) a true (JavaScript)
+            document.getElementById('btn-guardar').innerText = "⏳ Sincronizando en segundo plano...";
+            document.getElementById('btn-guardar').style.backgroundColor = "#64748b";
+            document.getElementById('btn-guardar').disabled = true; 
+
+            fetch('/api/guardar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(listaCambios)
+            })
+            .then(res => res.json())
+            .then(data => {
+                // Restauramos el color original de las celdas guardadas
+                listaCambios.forEach(modif => {
+                    if (modif.celdasAfectadas) {
+                        modif.celdasAfectadas.forEach(celda => {
+                            celda.style.backgroundColor = ''; 
+                            celda.style.color = '';           
+                        });
+                    }
+                });
+
+                // Limpiamos el mapa de cambios
+                const totalGuardados = registroModificaciones.size;
+                registroModificaciones.clear();
+
+                // Restauramos el botón verde original
+                document.getElementById('btn-guardar').innerText = "💾 Guardar Cambios en Tienda Nube";
+                document.getElementById('btn-guardar').style.backgroundColor = "#059669";
+                document.getElementById('btn-guardar').disabled = false;
+                
+                // 🔔 Cartel de confirmación sin recargar la página
+                alert("🏆 ¡Cambios impactados en Tienda Nube! Se procesaron " + data.actualizados + " variantes en segundo plano.");
+            })
+            .catch(err => {
+                alert("Hubo un error de conexión al intentar guardar.");
+                document.getElementById('btn-guardar').innerText = "💾 Guardar Cambios en Tienda Nube";
+                document.getElementById('btn-guardar').style.backgroundColor = "#059669";
+                document.getElementById('btn-guardar').disabled = false;
+            });
+        });
+    </script>
+</body>
+</html>
