@@ -53,7 +53,7 @@ def index():
 def auth_callback():
     """
     Callback Oficial: Recibe el código temporal de Tiendanube, solicita el
-    Access Token definitivo y lo guarda inmediatamente en la memoria del servidor.
+    Access Token definitivo utilizando data=payload y lo guarda en el backend.
     """
     global STORE_ID, ACCESS_TOKEN
     code = request.args.get('code')
@@ -71,15 +71,21 @@ def auth_callback():
     }
     
     try:
-        print("📡 Enviando solicitud de Token a Tiendanube...")
-        response = requests.post(token_url, json=payload).json()
+        print("📡 Enviando solicitud de Token a Tiendanube mediante Data Form...")
+        # CORRECCIÓN CLAVE: Se usa data=payload en lugar de json=payload
+        res_oauth = requests.post(token_url, data=payload)
+        
+        print(f"📡 Respuesta cruda del servidor Tiendanube: {res_oauth.status_code} - {res_oauth.text}")
+        response = res_oauth.json()
         
         # Guardado inmediato en variables globales del backend
         ACCESS_TOKEN = response.get('access_token')
         STORE_ID = response.get('user_id') 
         
+        if not ACCESS_TOKEN:
+            return f"Error en la vinculación: Tiendanube devolvió un error -> {response.get('error_description', response)}", 400
+        
         print(f"✅ Credenciales fijadas en memoria -> Tienda ID: {STORE_ID}")
-        print(f"✅ Token generado exitosamente: {ACCESS_TOKEN[:10]}...")
         
         # Renderiza la plantilla intermedia pasándole los datos reales capturados
         return render_template('conectar.html', tienda_id=STORE_ID, token=ACCESS_TOKEN, mostrar_boton=True)
@@ -142,7 +148,6 @@ def obtener_productos():
             nombre_prod = prod.get('name', {}).get('es', 'Sin nombre')
             
             # --- CAPTURA DE NOMBRES DE PROPIEDADES REALES ---
-            # En vez de "Propiedad 1", extrae "Color", "Talle", etc., según configuró el cliente.
             atributos_prod = prod.get('attributes', [])
             nombres_propiedades = []
             for attr in atributos_prod:
@@ -308,9 +313,9 @@ def guardar_cambios():
         try:
             res = requests.put(url_variant, headers=headers_dinamicos, json=payload_variante)
             
-            # Control de Rate Limiting (Límite de llamadas API de Tiendanube)
+            # Control de Rate Limiting
             if res.status_code == 429:
-                print("⏳ API Límite alcanzado (429). Esperando 6 segundos de penalización...")
+                print("⏳ API Límite alcanzado (429). Esperando 6 segundos...")
                 time.sleep(6)
                 res = requests.put(url_variant, headers=headers_dinamicos, json=payload_variante)
                 
@@ -321,7 +326,6 @@ def guardar_cambios():
         except Exception as e: 
             print(f"   ❌ Error de red al intentar actualizar variante {vid}: {e}")
             
-        # Pequeño delay de cortesía para estabilizar el hilo de peticiones
         time.sleep(0.04)
 
     print(f"💾 Guardado Masivo Finalizado. Sincronizaciones exitosas: {contador_ok}/{len(cambios)}")
@@ -344,6 +348,5 @@ def permitir_iframe(response):
 
 
 if __name__ == '__main__':
-    # Render asigna el puerto mediante variables de entorno en producción
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
