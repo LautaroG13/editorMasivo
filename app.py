@@ -255,4 +255,13 @@ def guardar_cambios():
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=port)# =========================================================================
+# OBLIGATORIO PARA TIENDANUBE: PERMITIR QUE LA APP SE CARGUE EN EL IFRAME
+# =========================================================================
+@app.after_request
+def permitir_iframe(response):
+    # Le quitamos la traba de seguridad estándar
+    response.headers.removeAttribute('X-Frame-Options')
+    # Le decimos explícitamente que deje cargar la app dentro de Tiendanube
+    response.headers['Content-Security-Policy'] = "frame-ancestors 'self' https://*.tiendanube.com https://*.mitiendanube.com https://admin.tiendanube.com;"
+    return response
