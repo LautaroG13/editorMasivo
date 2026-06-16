@@ -27,16 +27,15 @@ def obtener_headers():
     }
 # =========================================================================
 
-# 1. LA RAÍZ AHORA ES LIBRE: Muestra el editor solo si ya se aprobó el paso previo
+# 1. LA RAÍZ: Si ya está aprobada la tienda, muestra el dashboard directamente
 @app.route('/')
 def index():
     global ACCESS_TOKEN
     if not ACCESS_TOKEN:
-        # Si entran directo y no hay token, los mandamos a esperar la instalación
         return render_template('conectar.html', tienda_id="No conectada", token="No generado", mostrar_boton=False)
     return render_template('dashboard.html')
 
-# 2. EL PASO PREVIO: Captura los datos y te los muestra en una pantalla antes de activar el editor
+# 2. EL PASO PREVIO: Captura los datos en el aire y los muestra en pantalla
 @app.route('/auth/callback')
 def auth_callback():
     global STORE_ID, ACCESS_TOKEN
@@ -53,27 +52,23 @@ def auth_callback():
     }
     
     try:
-        # Intercambiamos el código por los datos reales de la tienda
         response = requests.post(token_url, json=payload).json()
         
-        # Capturamos temporalmente para mostrárselos al usuario en la pantalla previa
         temp_token = response.get('access_token')
         temp_store = response.get('user_id') 
         
-        # En lugar de redirigir directo, le mostramos la pantalla de aprobación previa
-        # Pasamos los datos al HTML 'conectar.html' para que queden a la vista
         return render_template('conectar.html', tienda_id=temp_store, token=temp_token, mostrar_boton=True)
 
     except Exception as e:
         return f"Error en la vinculación OAuth: {str(e)}", 500
 
-# 3. EL COBRO DE PERMISOS: Cuando el usuario le da "Aceptar y Conectar Editor Masivo" en la pantalla previa
+# 3. CONFIRMACIÓN: Guarda las credenciales e indica el éxito
 @app.route('/api/confirmar_conexion', methods=['POST'])
 def confirmar_conexion():
     global STORE_ID, ACCESS_TOKEN
     datos = request.json
     
-    # Se liberan oficialmente las variables para que el editor masivo empiece a funcionar
+    # Se activan las variables para el Editor Masivo
     STORE_ID = datos.get('tienda_id')
     ACCESS_TOKEN = datos.get('token')
     
@@ -81,13 +76,12 @@ def confirmar_conexion():
     print(f"STORE_ID Activado: {STORE_ID}")
     print(f"==========================================")
     
-    # Devolvemos la URL oficial de Tiendanube para que la app se declare como "Conectada"
-    url_final = f"https://admin.tiendanube.com/admin/apps/{STORE_ID}/installed"
-    return jsonify({"status": "success", "redirect_url": url_final})
+    # Le avisamos a JavaScript que la vinculación fue un éxito rotundo
+    return jsonify({"status": "success"})
 
 
 # =========================================================================
-# TU LOGICA ORIGINAL DE CARGA INFINITA Y GUARDAR MASIVO (Sigue intacta)
+# TU LOGICA ORIGINAL DE CARGA INFINITA Y GUARDAR MASIVO
 # =========================================================================
 @app.route('/api/productos', methods=['GET'])
 def obtener_productos():
@@ -253,15 +247,19 @@ def guardar_cambios():
 
     return jsonify({"status": "success", "actualizados": contador_ok})
 
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)# =========================================================================
-# OBLIGATORIO PARA TIENDANUBE: PERMITIR QUE LA APP SE CARGUE EN EL IFRAME
+
+# =========================================================================
+# 🔓 LIBERACIÓN DEL IFRAME DE TIENDANUBE (Crucial para menú interno)
 # =========================================================================
 @app.after_request
 def permitir_iframe(response):
-    # Le quitamos la traba de seguridad estándar
-    response.headers.removeAttribute('X-Frame-Options')
-    # Le decimos explícitamente que deje cargar la app dentro de Tiendanube
+    # Remueve el bloqueo tradicional
+    response.headers.pop('X-Frame-Options', None)
+    # Permite expresamente que tu app corra incrustada en Tiendanube
     response.headers['Content-Security-Policy'] = "frame-ancestors 'self' https://*.tiendanube.com https://*.mitiendanube.com https://admin.tiendanube.com;"
     return response
+
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)

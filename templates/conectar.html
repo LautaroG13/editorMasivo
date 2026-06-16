@@ -42,7 +42,6 @@ function conectarEditor() {
     const tiendaId = document.getElementById('tiendaId').innerText;
     const token = document.getElementById('tokenHex').innerText;
 
-    // Le mandamos los datos aprobados a Python mediante POST
     fetch('/api/confirmar_conexion', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -51,9 +50,9 @@ function conectarEditor() {
     .then(res => res.json())
     .then(data => {
         if(data.status === 'success') {
-            // Una vez que Python guardó los datos en vivo, redirigimos al administrador de Tiendanube
-            // Esto cierra el bucle y da por aprobada la aplicación en Partners
-            window.location.href = data.redirect_url;
+            // ¡MAGIA! En vez de ir a una URL externa rota, recargamos la app en el mismo lugar.
+            // Al estar ya el token guardado en el backend, Flask va a renderizar tu grilla original.
+            window.location.reload();
         }
     });
 }
