@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Conectar Editor Masivo</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; color: #333; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); width: 100%; max-width: 500px; text-align: center; }
+        h2 { color: #0084FF; margin-bottom: 10px; }
+        p { color: #666; font-size: 14px; margin-bottom: 25px; }
+        .data-box { background: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px; text-align: left; margin-bottom: 20px; font-family: monospace; font-size: 13px; word-break: break-all; }
+        .label { font-weight: bold; color: #475569; font-family: sans-serif; font-size: 12px; text-transform: uppercase; display: block; margin-bottom: 4px; }
+        .btn { background: #0084FF; color: white; border: none; padding: 12px 24px; font-size: 15px; font-weight: bold; border-radius: 6px; cursor: pointer; width: 100%; transition: background 0.2s; }
+        .btn:hover { background: #0066CC; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>Paso Previo de Conexión</h2>
+    <p>Se capturaron las credenciales dinámicas de Tiendanube. Verificá los datos libres antes de activar el Editor Masivo.</p>
+    
+    <div class="data-box">
+        <span class="label">STORE_ID (Número de Tienda):</span>
+        <span id="tiendaId">{{ tienda_id }}</span>
+    </div>
+    
+    <div class="data-box">
+        <span class="label">ACCESS_TOKEN (Token de Acceso):</span>
+        <span id="tokenHex">{{ token }}</span>
+    </div>
+
+    {% if mostrar_boton %}
+    <button class="btn" onclick="conectarEditor()">Aprobar y Conectar Editor Masivo</button>
+    {% else %}
+    <div style="color: #ef4444; font-weight: bold; font-size: 14px;">Iniciá la instalación desde el panel de Partners para ver los datos libres aquí.</div>
+    {% endif %}
+</div>
+
+<script>
+function conectarEditor() {
+    const tiendaId = document.getElementById('tiendaId').innerText;
+    const token = document.getElementById('tokenHex').innerText;
+
+    // Le mandamos los datos aprobados a Python mediante POST
+    fetch('/api/confirmar_conexion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tienda_id: tiendaId, token: token })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if(data.status === 'success') {
+            // Una vez que Python guardó los datos en vivo, redirigimos al administrador de Tiendanube
+            // Esto cierra el bucle y da por aprobada la aplicación en Partners
+            window.location.href = data.redirect_url;
+        }
+    });
+}
+</script>
+</body>
+</html>
