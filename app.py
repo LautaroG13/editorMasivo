@@ -213,13 +213,10 @@ def home():
 # ESTA ES LA NUEVA RUTA CLAVE PARA TIENDANUBE
 @app.route('/auth/callback')
 def auth_callback():
-    # 1. Tiendanube te envía un código temporal por la URL
     code = request.args.get('code')
-    
     if not code:
-        return "Error: No se recibió el código de autorización de Tiendanube.", 400
+        return "Error: No se recibió el código", 400
 
-    # 2. Intercambiamos ese código por el Access Token definitivo de la tienda
     token_url = "https://www.tiendanube.com/apps/authorize/token"
     payload = {
         "client_id": CLIENT_ID,
@@ -231,34 +228,14 @@ def auth_callback():
     try:
         response = requests.post(token_url, json=payload).json()
         access_token = response.get('access_token')
-        user_id = response.get('user_id') # Este es el ID único de la tienda que te instaló
-        
-        # Con este access_token ya tenés permiso de editar sus productos.
-        print(f"¡Éxito! Tienda conectada: ID {user_id} - Token: {access_token}")
-        
-        # 3. Redirigimos al usuario a la página principal de tu editor
-        return redirect('/')
-        
-    except Exception as e:
-        return f"Error en la autenticación: {str(e)}", 500
-
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
-
-    try:
-        response = requests.post(token_url, json=payload).json()
-        access_token = response.get('access_token')
         user_id = response.get('user_id') 
         
-        # Guardamos el token para usarlo después
         tienda_actual["access_token"] = access_token
         tienda_actual["user_id"] = user_id
         
         print(f"¡Éxito! Tienda conectada: ID {user_id}")
         
-        # IMPORTANTE: Redirigir de vuelta al administrador de Tiendanube
-        # Esto le avisa a Tiendanube que la instalación fue un éxito rotundo
+        # FIJATE ACÁ: Tiene que estar a la misma altura que el print de arriba (8 espacios)
         return redirect(f"https://admin.tiendanube.com/admin/apps/{user_id}/installed")
 
     except Exception as e:
