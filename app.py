@@ -188,4 +188,8 @@ def guardar_cambios():
     return jsonify({"status": "success", "actualizados": contador_ok})
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    import os
+    # Render nos da el puerto en una variable de entorno. Si no existe, usa el 5000 por defecto.
+    port = int(os.environ.get('PORT', 5000))
+    # CRUCIAL: '0.0.0.0' le dice a Flask que escuche conexiones externas, no solo locales.
+    app.run(host='0.0.0.0', port=port)
